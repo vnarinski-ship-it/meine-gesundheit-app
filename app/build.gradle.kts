@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "de.vnarinski.meinegesundheit"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "de.vnarinski.meinegesundheit"
