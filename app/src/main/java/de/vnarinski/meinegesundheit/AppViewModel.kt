@@ -14,6 +14,7 @@ import de.vnarinski.meinegesundheit.data.PortableBackupManager
 import de.vnarinski.meinegesundheit.data.SecuritySettings
 import de.vnarinski.meinegesundheit.data.SecuritySettingsRepository
 import de.vnarinski.meinegesundheit.ai.OpenAiAnalyzer
+import de.vnarinski.meinegesundheit.ai.OpenAiKeyTester
 import de.vnarinski.meinegesundheit.domain.*
 import de.vnarinski.meinegesundheit.gps.DrivePrivacyMode
 import de.vnarinski.meinegesundheit.gps.DriveTrackingService
@@ -236,10 +237,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
 
     fun saveAiSettings(apiKey: String, model: String) = viewModelScope.launch {
-        val settings = AiSettings(apiKey.trim(), model.trim().ifBlank { "gpt-5" })
+        val cleanKey = apiKey.trim()
+        if (cleanKey.isBlank()) {
+            _message.value = "API-Schlüssel ist leer"
+            return@launch
+        }
+        val settings = AiSettings(cleanKey, model.trim().ifBlank { "gpt-5" })
         aiSettingsRepo.save(settings)
         _aiSettings.value = settings
-        _message.value = "KI-Einstellungen verschlüsselt gespeichert"
+        _message.value = "API-Schlüssel verschlüsselt gespeichert"
+    }
+
+    fun testAiConnection(apiKey: String) = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        val cleanKey = apiKey.trim()
+        if (cleanKey.isBlank()) {
+            _message.value = "API-Schlüssel ist leer"
+            return@launch
+        }
+        OpenAiKeyTester.test(cleanKey)
+            .onSuccess { _message.value = "API-Schlüssel funktioniert" }
+            .onFailure { _message.value = "API-Test fehlgeschlagen: " + (it.message ?: "unbekannt") }
     }
 
     fun analyzeMeal(mealId: String) = viewModelScope.launch {
