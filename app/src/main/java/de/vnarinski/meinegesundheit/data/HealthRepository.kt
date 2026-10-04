@@ -41,6 +41,31 @@ class HealthRepository(private val context: Context) {
     suspend fun loadReminders() = withContext(Dispatchers.IO) { s().reminders.toList() }
     suspend fun loadHealthMetrics() = withContext(Dispatchers.IO) { s().metrics.toList() }
 
+
+    suspend fun importOcrHubPayload(uri: Uri): MedicalDocument = withContext(Dispatchers.IO) {
+        val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error("OCR-Daten konnten nicht gelesen werden")
+        val json = JSONObject(raw.toString(Charsets.UTF_8))
+        require(json.optInt("schemaVersion", 0) == 1) { "Unbekanntes OCR-Hub-Format" }
+        val id = UUID.randomUUID().toString()
+        val blob = "ocr-hub-$id.json.enc"
+        vault.write(blob, raw)
+        val title = json.optString("fileName").ifBlank { "OCR Hub Dokument" }
+        val ocrText = json.optString("ocrText")
+        val importedAt = json.optString("importedAt").let { runCatching { Instant.parse(it) }.getOrElse { Instant.now() } }
+        val item = MedicalDocument(
+            id = id,
+            title = title,
+            documentDate = importedAt,
+            originalUri = "vault://$blob",
+            aiSummary = if (ocrText.isBlank()) "OCR Hub: kein erkannter Text" else "OCR Hub Text:\n$ocrText",
+            provenance = Provenance(DataOrigin.LAB_IMPORT, "OCR Hub", Confidence.USER_CONFIRMED)
+        )
+        s().documents.add(0, item)
+        save()
+        item
+    }
+
     suspend fun importDocument(uri: Uri): MedicalDocument = withContext(Dispatchers.IO) {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Dokument konnte nicht gelesen werden")
         val id = UUID.randomUUID().toString()
