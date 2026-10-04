@@ -94,6 +94,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _driveActive.value = isDriveServiceMarkedActive(getApplication())
     }
 
+    fun importOcrHubPayload(uri: Uri) = viewModelScope.launch {
+        runCatching { repo.importOcrHubPayload(uri) }
+            .onSuccess {
+                _message.value = "OCR-Hub-Daten in Gesundheit übernommen"
+                refresh()
+            }
+            .onFailure { _message.value = "OCR-Import fehlgeschlagen: " + (it.message ?: "unbekannt") }
+    }
+
     fun importDocument(uri: Uri) = viewModelScope.launch {
         runCatching { repo.importDocument(uri) }
             .onSuccess { _message.value = "Befund sicher gespeichert"; refresh() }
