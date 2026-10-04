@@ -20,6 +20,11 @@ class ExportManager(private val context: Context) {
             .put("mimeType", rec.mimeType)
             .put("importedAt", rec.importedAt.toString())
             .put("ocrText", rec.ocrText)
+            .put("aiDocumentType", rec.aiDocumentType)
+            .put("aiSummary", rec.aiSummary)
+            .put("aiSuggestedTarget", rec.aiSuggestedTarget)
+            .put("aiFacts", org.json.JSONArray(rec.aiFacts))
+            .put("aiCaution", rec.aiCaution)
         file.writeText(json.toString(2))
         val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
