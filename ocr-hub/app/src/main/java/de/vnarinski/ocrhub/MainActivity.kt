@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
         setContent { MaterialTheme { OcrHubApp() } }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun OcrHubApp() {
         var records by remember { mutableStateOf(store.all()) }
