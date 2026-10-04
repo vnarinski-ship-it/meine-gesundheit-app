@@ -23,6 +23,8 @@ import de.vnarinski.meinegesundheit.report.DoctorPdfExporter
 import de.vnarinski.meinegesundheit.health.AndroidHealthConnectConnector
 import de.vnarinski.meinegesundheit.export.HealthDataExporter
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -266,13 +268,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val uri = meal.photoUri ?: run { _message.value = "Diese Mahlzeit hat kein Foto"; return@launch }
         _aiBusy.value = true
         runCatching {
-            val bytes = repo.readVaultUri(uri)
-            OpenAiAnalyzer(settings.apiKey, settings.model).analyzeMeal(bytes)
+            withContext(Dispatchers.IO) {
+                val bytes = repo.readVaultUri(uri)
+                OpenAiAnalyzer(settings.apiKey, settings.model).analyzeMeal(bytes)
+            }
         }.onSuccess { result ->
             repo.applyMealAiResult(mealId, result.items, result.summary, result.uncertainty)
             _message.value = "Essensfoto analysiert – Werte sind Schätzungen"
             refresh()
-        }.onFailure { _message.value = "KI-Analyse fehlgeschlagen: ${it.message}" }
+        }.onFailure {
+            _message.value = "KI-Analyse fehlgeschlagen: " + (it.message ?: it.javaClass.simpleName)
+        }
         _aiBusy.value = false
     }
 
@@ -282,8 +288,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val doc = _documents.value.firstOrNull { it.id == documentId } ?: return@launch
         _aiBusy.value = true
         runCatching {
-            val bytes = repo.readVaultUri(doc.originalUri)
-            OpenAiAnalyzer(settings.apiKey, settings.model).analyzeDocument(bytes, doc.title)
+            withContext(Dispatchers.IO) {
+                val analyzer = OpenAiAnalyzer(settings.apiKey, settings.model)
+                val ocrText = doc.aiSummary
+                    ?.takeIf { it.startsWith("OCR Hub Text:\n") }
+                    ?.removePrefix("OCR Hub Text:\n")
+                    ?.trim()
+                if (!ocrText.isNullOrBlank()) {
+                    analyzer.analyzeMedicalText(ocrText)
+                } else {
+                    val bytes = repo.readVaultUri(doc.originalUri)
+                    analyzer.analyzeDocument(bytes, doc.title)
+                }
+            }
         }.onSuccess { result ->
             repo.applyDocumentAiSummary(documentId, result.summary, result.importantValues, result.questionsForDoctor)
             _pendingLabCandidates.value = result.labCandidates.map { c ->
