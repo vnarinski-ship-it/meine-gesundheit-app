@@ -12,8 +12,27 @@ android {
         applicationId = "de.vnarinski.meinegesundheit"
         minSdk = 28
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.0"
+        versionCode = 11
+        versionName = "1.0.1"
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePath = System.getenv("RELEASE_STORE_FILE")
+            if (!storePath.isNullOrBlank()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
     }
 
     buildFeatures { compose = true }
