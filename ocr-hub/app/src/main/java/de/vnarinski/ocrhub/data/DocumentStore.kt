@@ -37,6 +37,28 @@ class DocumentStore(private val context: Context) {
         return all[i]
     }
 
+    fun updateAi(
+        id: String,
+        documentType: String,
+        summary: String,
+        suggestedTarget: String,
+        facts: List<String>,
+        caution: String
+    ): DocumentRecord {
+        val all = all().toMutableList()
+        val i = all.indexOfFirst { it.id == id }
+        require(i >= 0) { "Dokument nicht gefunden" }
+        all[i] = all[i].copy(
+            aiDocumentType = documentType,
+            aiSummary = summary,
+            aiSuggestedTarget = suggestedTarget,
+            aiFacts = facts,
+            aiCaution = caution
+        )
+        persist(all)
+        return all[i]
+    }
+
     fun all(): List<DocumentRecord> {
         val raw = prefs.getString("records", "[]") ?: "[]"
         val arr = JSONArray(raw)
@@ -52,7 +74,15 @@ class DocumentStore(private val context: Context) {
                         importedAt = Instant.parse(o.getString("importedAt")),
                         ocrText = o.optString("ocrText"),
                         pageCount = o.optInt("pageCount", 1),
-                        source = o.optString("source", "import")
+                        source = o.optString("source", "import"),
+                        aiDocumentType = o.optString("aiDocumentType"),
+                        aiSummary = o.optString("aiSummary"),
+                        aiSuggestedTarget = o.optString("aiSuggestedTarget"),
+                        aiFacts = buildList {
+                            val a = o.optJSONArray("aiFacts") ?: JSONArray()
+                            for (j in 0 until a.length()) add(a.optString(j))
+                        },
+                        aiCaution = o.optString("aiCaution")
                     )
                 )
             }
@@ -80,6 +110,11 @@ class DocumentStore(private val context: Context) {
                 .put("ocrText", r.ocrText)
                 .put("pageCount", r.pageCount)
                 .put("source", r.source)
+                .put("aiDocumentType", r.aiDocumentType)
+                .put("aiSummary", r.aiSummary)
+                .put("aiSuggestedTarget", r.aiSuggestedTarget)
+                .put("aiFacts", JSONArray(r.aiFacts))
+                .put("aiCaution", r.aiCaution)
             )
         }
         prefs.edit().putString("records", arr.toString()).apply()
