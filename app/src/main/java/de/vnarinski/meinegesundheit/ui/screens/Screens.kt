@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -183,10 +184,19 @@ fun AiScreen(vm: AppViewModel) {
     var model by remember(settings.model) { mutableStateOf(settings.model) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("KI", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Daten werden nur nach deiner Aktion an die KI gesendet.")
-        OutlinedTextField(key, { key = it }, label = { Text("OpenAI API-Schlüssel") }, modifier = Modifier.fillMaxWidth())
+        Text("Der Schlüssel wird lokal verschlüsselt gespeichert. Daten werden nur nach deiner Aktion an die KI gesendet.")
+        OutlinedTextField(
+            value = key,
+            onValueChange = { key = it },
+            label = { Text("OpenAI API-Schlüssel") },
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
         OutlinedTextField(model, { model = it }, label = { Text("Modell") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { vm.saveAiSettings(key, model) }, modifier = Modifier.fillMaxWidth()) { Text("Sicher speichern") }
+        Button(onClick = { vm.saveAiSettings(key, model) }, modifier = Modifier.fillMaxWidth()) { Text("Schlüssel speichern") }
+        OutlinedButton(onClick = { vm.testAiConnection(key) }, modifier = Modifier.fillMaxWidth()) { Text("Verbindung testen") }
+        Text(if (settings.configured) "Status: Schlüssel gespeichert" else "Status: noch kein Schlüssel gespeichert")
     }
 }
 
