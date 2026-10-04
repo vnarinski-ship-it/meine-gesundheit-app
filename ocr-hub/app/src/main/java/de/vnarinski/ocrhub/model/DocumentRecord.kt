@@ -10,7 +10,12 @@ data class DocumentRecord(
     val importedAt: Instant,
     val ocrText: String = "",
     val pageCount: Int = 1,
-    val source: String = "import"
+    val source: String = "import",
+    val aiDocumentType: String = "",
+    val aiSummary: String = "",
+    val aiSuggestedTarget: String = "",
+    val aiFacts: List<String> = emptyList(),
+    val aiCaution: String = ""
 )
 
 data class ExportEnvelope(
