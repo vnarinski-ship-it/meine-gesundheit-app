@@ -35,7 +35,7 @@ class OpenAiAnalyzer(
     private val model: String = "gpt-5"
 ) {
     fun analyzeMeal(imageBytes: ByteArray, mimeType: String = "image/jpeg"): MealAiResult {
-        val dataUrl = "data:$mimeType;base64,${Base64.encodeToString(imageBytes, Base64.NO_WRAP)}"
+        val dataUrl = "data:" + mimeType + ";base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP)
         val prompt = """
             Analyze this meal photo for a low-carb food diary. Return JSON only with this exact shape:
             {"items":[{"name":"","grams":0,"carbs_g":0,"fiber_g":0,"protein_g":0,"fat_g":0,"kcal":0}],"summary":"","uncertainty":""}
@@ -62,17 +62,42 @@ class OpenAiAnalyzer(
     }
 
     fun analyzeDocument(fileBytes: ByteArray, filename: String): DocumentAiResult {
-        val prompt = """
-            Explain this medical document in clear German. Return JSON only with this exact shape:
-            {"summary":"","important_values":[""],"questions_for_doctor":[""],"lab_values":[{"name":"","value":null,"text_value":null,"unit":null,"reference_low":null,"reference_high":null,"source_text":""}]}
-            Separate facts stated in the document from interpretation. Do not diagnose. Include only explicit laboratory/test values in lab_values. Never invent missing values, units or reference ranges.
-        """.trimIndent()
         val base64 = Base64.encodeToString(fileBytes, Base64.NO_WRAP)
-        val body = responseBody(prompt, "input_file", "file_data", base64, filename)
+        val body = responseBody(medicalPrompt(), "input_file", "file_data", base64, filename)
+        return parseDocumentResult(body)
+    }
+
+    fun analyzeMedicalText(text: String): DocumentAiResult {
+        require(text.isNotBlank()) { "Kein OCR-Text vorhanden" }
+        val content = JSONArray().put(
+            JSONObject()
+                .put("type", "input_text")
+                .put("text", medicalPrompt() + "\n\nOCR-TEXT:\n" + text)
+        )
+        val request = JSONObject()
+            .put("model", model)
+            .put("input", JSONArray().put(JSONObject().put("role", "user").put("content", content)))
+        return parseDocumentResult(responseJson(request))
+    }
+
+    private fun medicalPrompt(): String = """
+        Erkläre dieses medizinische Dokument verständlich auf Deutsch. Gib ausschließlich JSON in exakt diesem Schema zurück:
+        {"summary":"","important_values":[""],"questions_for_doctor":[""],"lab_values":[{"name":"","value":null,"text_value":null,"unit":null,"reference_low":null,"reference_high":null,"source_text":""}]}
+        Trenne ausdrücklich im Dokument genannte Fakten von Interpretation. Keine Diagnose stellen.
+        In lab_values nur tatsächlich vorhandene Messwerte/Testwerte übernehmen.
+        Fehlende Werte, Einheiten oder Referenzbereiche niemals erfinden.
+    """.trimIndent()
+
+    private fun parseDocumentResult(body: String): DocumentAiResult {
         val json = extractJson(body)
         fun strings(key: String): List<String> {
             val a = json.optJSONArray(key) ?: return emptyList()
-            return buildList { for (i in 0 until a.length()) { val v = a.optString(i); if (v.isNotBlank()) add(v) } }
+            return buildList {
+                for (i in 0 until a.length()) {
+                    val v = a.optString(i)
+                    if (v.isNotBlank()) add(v)
+                }
+            }
         }
         val labsArray = json.optJSONArray("lab_values") ?: JSONArray()
         val labCandidates = buildList {
@@ -91,7 +116,12 @@ class OpenAiAnalyzer(
                 ))
             }
         }
-        return DocumentAiResult(json.optString("summary"), strings("important_values"), strings("questions_for_doctor"), labCandidates)
+        return DocumentAiResult(
+            json.optString("summary"),
+            strings("important_values"),
+            strings("questions_for_doctor"),
+            labCandidates
+        )
     }
 
     private fun responseBody(prompt: String, inputType: String, dataKey: String, data: String, filename: String?): String {
@@ -102,19 +132,23 @@ class OpenAiAnalyzer(
         val request = JSONObject()
             .put("model", model)
             .put("input", JSONArray().put(JSONObject().put("role", "user").put("content", content)))
+        return responseJson(request)
+    }
 
+    private fun responseJson(request: JSONObject): String {
         val conn = (URL("https://api.openai.com/v1/responses").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 30_000
             readTimeout = 90_000
             doOutput = true
-            setRequestProperty("Authorization", "Bearer $apiKey")
+            setRequestProperty("Authorization", "Bearer " + apiKey)
             setRequestProperty("Content-Type", "application/json")
         }
         conn.outputStream.use { it.write(request.toString().toByteArray()) }
-        val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val raw = stream.bufferedReader().use { it.readText() }
-        if (conn.responseCode !in 200..299) error("OpenAI API ${conn.responseCode}: ${raw.take(500)}")
+        if (code !in 200..299) error("OpenAI API " + code + ": " + raw.take(500))
         return extractOutputText(JSONObject(raw))
     }
 
