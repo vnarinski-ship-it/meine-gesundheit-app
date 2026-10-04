@@ -3,6 +3,8 @@ package de.vnarinski.meinegesundheit
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +28,7 @@ import de.vnarinski.meinegesundheit.ui.theme.MeineGesundheitTheme
 class MainActivity : FragmentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val unlocked = mutableStateOf(false)
+    val pendingOcrShare = mutableStateOf<Uri?>(null)
     private var authPromptShowing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,9 +36,22 @@ class MainActivity : FragmentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        captureOcrShare(intent)
         val settings = SecuritySettingsRepository(this).load()
         unlocked.value = !settings.appLockEnabled
         setContent { MeineGesundheitTheme { App(this) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureOcrShare(intent)
+    }
+
+    private fun captureOcrShare(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "application/vnd.vnarinski.ocrhub+json") {
+            pendingOcrShare.value = intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
     }
 
     override fun onStop() {
@@ -81,6 +97,7 @@ data class BottomItem(val route: String, val label: String, val icon: ImageVecto
 fun App(activity: MainActivity, vm: AppViewModel = viewModel()) {
     val security by vm.securitySettings.collectAsState()
     val unlocked by activity.unlocked
+    val pendingOcrShare by activity.pendingOcrShare
     var lockError by remember { mutableStateOf<String?>(null) }
 
     if (security.appLockEnabled && !unlocked) {
@@ -114,6 +131,12 @@ fun App(activity: MainActivity, vm: AppViewModel = viewModel()) {
         }
     }
     LaunchedEffect(Unit) { vm.checkBackupAgeAndNotify() }
+    LaunchedEffect(pendingOcrShare) {
+        pendingOcrShare?.let {
+            vm.importOcrHubPayload(it)
+            activity.pendingOcrShare.value = null
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
